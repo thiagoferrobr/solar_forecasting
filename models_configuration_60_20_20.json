@@ -1,45 +1,82 @@
 [
-{
+  {
     "name": "salvador_1",
+    "path_data": "./data/INMET_NE_BA_A401_SALVADOR_01-01-2020_A_31-12-2020.csv",
+    "test_size": 951,
+    "val_size": 951,
     "type_data": 1,
-    "path_data":"./data/INMET_NE_BA_A401_SALVADOR_01-01-2020_A_31-12-2020.csv",
-    "arima_path": "./arima_models/1-arima.txt",
-    "test_size": 951,
-    "val_size": 951,
-    "activate":1,
     "horzion": 1,
-    "hour_min_max":["0900 UTC", "2100 UTC"]
-},
-{
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 0
+  },
+  {
     "name": "fortaleza_1",
-    "type_data": 2,
-    "path_data":"./data/INMET_NE_CE_A305_FORTALEZA_01-01-2020_A_31-12-2020.csv",
-    "arima_path": "./arima_models/2-arima.txt",
+    "path_data": "./data/INMET_NE_CE_A305_FORTALEZA_01-01-2020_A_31-12-2020.csv",
     "test_size": 951,
     "val_size": 951,
-    "activate":1,
+    "type_data": 1,
     "horzion": 1,
-    "hour_min_max":["0900 UTC", "2100 UTC"]
-},
-{
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 0
+  },
+  {
     "name": "saopaulo_1",
-    "type_data": 4,
-    "path_data":"./data/INMET_SE_SP_A701_SAO PAULO - MIRANTE_01-01-2020_A_31-12-2020.csv",
-      "arima_path": "./arima_models/4-arima.txt",
+    "path_data": "./data/INMET_SE_SP_A701_SAO PAULO - MIRANTE_01-01-2020_A_31-12-2020.csv",
     "test_size": 951,
     "val_size": 951,
-    "activate":1,
+    "type_data": 1,
     "horzion": 1,
-    "hour_min_max":["0900 UTC", "2100 UTC"]
-},
-{
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 0
+  },
+  {
     "name": "florianopolis_1",
-    "type_data": 5,
-    "path_data":"./data/INMET_S_SC_A806_FLORIANOPOLIS_01-01-2020_A_31-12-2020.csv",
-    "arima_path": "./arima_models/5-arima.txt",
+    "path_data": "./data/INMET_S_SC_A806_FLORIANOPOLIS_01-01-2020_A_31-12-2020.csv",
     "test_size": 951,
     "val_size": 951,
-    "activate":1,
+    "type_data": 1,
     "horzion": 1,
-    "hour_min_max":["0900 UTC", "2100 UTC"]
-}]
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 0
+  },
+  {
+    "name": "maceio_2021",
+    "path_data": "/content/solar_forecasting/data/INMET_NE_AL_A303_MACEIO_01-01-2021_A_31-12-2021.CSV",
+    "test_size": 951,
+    "val_size": 951,
+    "type_data": 1,
+    "horzion": 1,
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 1
+  },
+  {
+    "name": "maceio_2022",
+    "path_data": "/content/solar_forecasting/data/INMET_NE_AL_A303_MACEIO_01-01-2022_A_31-12-2022.CSV",
+    "test_size": 951,
+    "val_size": 951,
+    "type_data": 1,
+    "horzion": 1,
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 1
+  },
+  {
+    "name": "maceio_2023",
+    "path_data": "/content/solar_forecasting/data/INMET_NE_AL_A303_MACEIO_01-01-2023_A_31-12-2023.CSV",
+    "test_size": 951,
+    "val_size": 951,
+    "type_data": 1,
+    "horzion": 1,
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 1
+  },
+  {
+    "name": "maceio_2024",
+    "path_data": "/content/solar_forecasting/data/INMET_NE_AL_A303_MACEIO_01-01-2024_A_31-12-2024.CSV",
+    "test_size": 951,
+    "val_size": 951,
+    "type_data": 1,
+    "horzion": 1,
+    "hour_min_max": ["0600 UTC", "1800 UTC"],
+    "activate": 1
+  }
+]
