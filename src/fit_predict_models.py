@@ -18,7 +18,7 @@ def get_windowing(ts_normalized, time_window, horizon, prefix=''):
     ts_windowed = ts_windowed[columns_lag + ['actual']]
     return ts_windowed
 
-# VERSÃO CORRIGIDA DA FUNÇÃO single_model
+# VERSÃO CORRIGIDA DA FUNÇÃO single_model (sem prints intermediários)
 def single_model(title, type_data, time_window, time_series, model, test_size,
                  val_size, return_option, normalize, horizon=1, recursive=False, use_exo_future=True):
     
@@ -34,11 +34,9 @@ def single_model(title, type_data, time_window, time_series, model, test_size,
             
     ts_windowed = get_windowing(ts_normalized, time_window, horizon)
     
-    # Lógica de treino e previsão corrigida
     reg = tsf.fit_sklearn_model(ts_windowed, model, test_size, val_size)
     pred = tsf.predict_sklearn_model(ts_windowed, reg)
 
-    # Lógica para calcular e imprimir ambos os RMSEs
     pred_normalized = pred.copy()
     ts_atu_normalized = ts_normalized['actual'][-len(pred_normalized):].values
     ts_atu_unnormalized = time_series['actual'][-len(pred_normalized):].values
@@ -46,22 +44,20 @@ def single_model(title, type_data, time_window, time_series, model, test_size,
     
     if normalize:
         pred_unnormalized = min_max_scaler.inverse_transform(pred_unnormalized.reshape(-1, 1)).flatten()
-
-    rmse_unnormalized = root_mean_square_error(ts_atu_unnormalized, pred_unnormalized)
-    rmse_normalized = root_mean_square_error(ts_atu_normalized, pred_normalized)
     
-    print(f"\n  >> RMSE (Original / Não Normalizado): {rmse_unnormalized:.4f}")
-    print(f"  >> RMSE (Normalizado / Artigo):      {rmse_normalized:.4f}\n")
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    # As linhas de print foram comentadas para não gerar output a cada passo.
+    # rmse_unnormalized = root_mean_square_error(ts_atu_unnormalized, pred_unnormalized)
+    # rmse_normalized = root_mean_square_error(ts_atu_normalized, pred_normalized)
+    # print(f"\n  >> RMSE (Original / Não Normalizado): {rmse_unnormalized:.4f}")
+    # print(f"  >> RMSE (Normalizado / Artigo):      {rmse_normalized:.4f}\n")
+    # --------------------------------------------------------------------------
 
-    try:
-        df_prevs = model.prevs_df
-    except:
-        df_prevs = None
-        
+    # O resto do código continua a usar os valores para salvar os resultados
     results = tsf.make_metrics_avaliation(ts_atu_unnormalized, pred_unnormalized,
                                           test_size, val_size,
                                           return_option, model.get_params(deep=True),
-                                          title + '(tw' + str(time_window) + ')', df_prevs)
+                                          title + '(tw' + str(time_window) + ')')
     return results
 
 def do_grid_search(type_data, real, test_size, val_size, parameters, model, horizon,
