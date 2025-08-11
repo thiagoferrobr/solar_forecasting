@@ -13,20 +13,21 @@ def utc_hour_to_int(x):
 
 def load_data_solar_hours(path, min_max, use_log, save_cv):
     try:
-        df_total = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8)
+        df_total = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     except Exception:
         df_total = pd.read_csv(path, sep=',', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     
-    df_total.columns = df_total.columns.str.strip()
+    df_total.columns = [str(col).strip() for col in df_total.columns]
     coluna_radiacao = 'RADIACAO GLOBAL (Kj/m²)'
     
     if coluna_radiacao not in df_total.columns:
-         raise KeyError(f"A coluna '{coluna_radiacao}' não foi encontrada. Colunas disponíveis: {df_total.columns.tolist()}")
+        raise KeyError(f"A coluna '{coluna_radiacao}' não foi encontrada. Colunas disponíveis: {df_total.columns.tolist()}")
 
     df_total[coluna_radiacao] = pd.to_numeric(df_total[coluna_radiacao], errors='coerce').fillna(0)
     
+    # Tenta múltiplos formatos de data para máxima compatibilidade
     try:
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %HM UTC', errors='raise')
+        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='raise')
     except ValueError:
         df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='coerce')
     
@@ -77,5 +78,3 @@ def predict_sklearn_model(ts, model):
     return model.predict(x.values)
 
 print("Arquivo 'src/time_series_functions.py' sobrescrito com a versão final.")
-
-# --- Corrigindo o src/fit_predict_models.py ---

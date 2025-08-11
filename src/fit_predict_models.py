@@ -37,6 +37,11 @@ def single_model(title, type_data, time_window, time_series, model, test_size,
     pred_unnormalized = pred_normalized.copy()
     if normalize:
         pred_unnormalized = min_max_scaler.inverse_transform(pred_unnormalized.reshape(-1, 1)).flatten()
+    # Descomente as linhas abaixo se quiser o output detalhado durante o GridSearch
+    # rmse_unnormalized = root_mean_square_error(ts_atu_unnormalized, pred_unnormalized)
+    # rmse_normalized = root_mean_square_error(ts_atu_normalized, pred_normalized)
+    # print(f"\n  >> RMSE (Original / Não Normalizado): {rmse_unnormalized:.4f}")
+    # print(f"  >> RMSE (Normalizado / Artigo):      {rmse_normalized:.4f}\n")
     results = tsf.make_metrics_avaliation(ts_atu_unnormalized, pred_unnormalized,
                                           test_size, val_size,
                                           return_option, model.get_params(deep=True),
@@ -67,7 +72,7 @@ def train_sklearn(model_execs, data_title, parameters, model):
         if i.get('activate', 0) == 1:
             print(i['name']); print(i['path_data'])
             test_size, val_size, type_data, horizon, min_max = i['test_size'], i['val_size'], i['type_data'], i['horzion'], i['hour_min_max']
-            real = tsf.load_data_solar_hours(i['path_data'], min_max, use_log, False) # save_cv is False
+            real = tsf.load_data_solar_hours(i['path_data'], min_max, use_log, False) # save_cv está False
             gs_result = do_grid_search(type_data=type_data, real=real, test_size=test_size, val_size=val_size, parameters=parameters, model=model, horizon=horizon, recurvise=recurvise, use_exegen_future=use_exegen_future, model_execs=model_execs)
             print(gs_result)
             save_path_actual = f"{save_path}{type_data}-{data_title}/"
