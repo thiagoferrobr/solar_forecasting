@@ -4,7 +4,6 @@ import pickle as pkl
 import datetime
 import uuid
 import json
-import csv
 
 class result_options:
     test_result, val_result, train_result, save_result = 0, 1, 2, 3
@@ -12,51 +11,26 @@ class result_options:
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
-# =================================================================================
-#               VERSÃO FINAL COM LEITURA ROBUSTA E FORMATO DE DATA CORRETO
-# =================================================================================
 def load_data_solar_hours(path, min_max, use_log, save_cv):
-    dados_extraidos = []
-    colunas_finais = ['Data', 'Hora UTC', 'RADIACAO GLOBAL (Kj/m²)']
-
-    with open(path, mode='r', encoding='latin-1') as f:
-        # Pula as 8 linhas de metadados e a linha de cabeçalho
-        for _ in range(9):
-            try:
-                next(f)
-            except StopIteration:
-                break
-        
-        for line in f:
-            try:
-                # O separador nos arquivos do INMET é inconsistente, então tentamos os dois.
-                campos = line.strip().split(';')
-                if len(campos) < 7: 
-                    campos = line.strip().split(',')
-                
-                if len(campos) > 6:
-                    dados_extraidos.append([campos[0], campos[1], campos[6]])
-            except (IndexError, ValueError):
-                continue
-
-    if not dados_extraidos:
-        raise ValueError(f"Nenhum dado válido pôde ser extraído do arquivo: {path}. Verifique o formato do arquivo.")
-
-    df_total = pd.DataFrame(dados_extraidos, columns=colunas_finais)
-
-    coluna_radiacao = 'RADIACAO GLOBAL (Kj/m²)'
-    # Converte a coluna de radiação para número, tratando vírgulas como decimais e preenchendo com 0
-    df_total[coluna_radiacao] = pd.to_numeric(df_total[coluna_radiacao].str.replace(',', '.'), errors='coerce').fillna(0)
-    
-    # --- CORREÇÃO PRINCIPAL APLICADA AQUI ---
-    # O formato da data foi corrigido para AAAA/MM/DD ou DD/MM/AAAA, o que funcionar.
     try:
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
+        df_total = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8)
+    except Exception:
+        df_total = pd.read_csv(path, sep=',', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+    
+    df_total.columns = df_total.columns.str.strip()
+    coluna_radiacao = 'RADIACAO GLOBAL (Kj/m²)'
+    
+    if coluna_radiacao not in df_total.columns:
+         raise KeyError(f"A coluna '{coluna_radiacao}' não foi encontrada. Colunas disponíveis: {df_total.columns.tolist()}")
+
+    df_total[coluna_radiacao] = pd.to_numeric(df_total[coluna_radiacao], errors='coerce').fillna(0)
+    
+    try:
+        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %HM UTC', errors='raise')
     except ValueError:
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
+        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='coerce')
     
     df_total.dropna(subset=['Data'], inplace=True)
-
     min_hour, max_hour = utc_hour_to_int(min_max[0]), utc_hour_to_int(min_max[1])
     cond = df_total['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
     df_total = df_total[cond]
@@ -66,15 +40,12 @@ def load_data_solar_hours(path, min_max, use_log, save_cv):
     
     if save_cv:
         df_total.to_csv(path.replace('.csv', '_solar.csv'))
-        
     return df_total
 
-# O resto das funções do arquivo são mantidas
 def create_windowing(df, lag_size):
     final_df = None
     for i in range(lag_size + 1):
-        serie = df.shift(i)
-        serie.columns = ['actual'] if i == 0 else [f'lag{i}']
+        serie = df.shift(i); serie.columns = ['actual'] if i == 0 else [f'lag{i}']
         final_df = pd.concat([serie, final_df], axis=1)
     return final_df.dropna()
 
@@ -84,8 +55,7 @@ def root_mean_square_error(y_true, y_pred):
 def make_metrics_avaliation(y_true, y_pred, test_size, val_size, return_type, model_params, title, prevs_df=None):
     test_metrics = {'RMSE': root_mean_square_error(y_true[-test_size:], y_pred[-test_size:])}
     geral_dict = {'test_metrics': test_metrics, 'params': model_params}
-    if return_type == result_options.save_result:
-        save_result(geral_dict, title)
+    if return_type == result_options.save_result: save_result(geral_dict, title)
     return geral_dict.get('test_metrics', {})
 
 def save_result(dict_result, title):
@@ -94,9 +64,7 @@ def save_result(dict_result, title):
     return title
 
 def open_saved_result(file_name):
-    with open(file_name, 'rb') as handle:
-        b = pkl.load(handle)
-    return b
+    with open(file_name, 'rb') as handle: return pkl.load(handle)
     
 def fit_sklearn_model(ts, model, test_size, val_size):
     train_size = ts.shape[0] - test_size - val_size
@@ -108,4 +76,6 @@ def predict_sklearn_model(ts, model):
     x = ts.drop(columns=['actual'])
     return model.predict(x.values)
 
-print("Arquivo 'src/time_series_functions.py' sobrescrito com a versão final e mais robusta.")
+print("Arquivo 'src/time_series_functions.py' sobrescrito com a versão final.")
+
+# --- Corrigindo o src/fit_predict_models.py ---
