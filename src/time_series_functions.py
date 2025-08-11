@@ -4,54 +4,44 @@ import pickle as pkl
 import datetime
 import uuid
 import json
-import csv # Importa a biblioteca para leitura manual de CSV
+import csv
 
-# As outras funções do arquivo são mantidas
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
 # =================================================================================
-#               VERSÃO FINAL COM LEITURA MANUAL E ROBUSTA
+#               VERSÃO FINAL COM TODAS AS CORREÇÕES
 # =================================================================================
 def load_data_solar_hours(path, min_max, use_log, save_cv):
     dados_extraidos = []
     colunas_finais = ['Data', 'Hora UTC', 'RADIACAO GLOBAL (Kj/m²)']
 
     with open(path, mode='r', encoding='latin-1') as f:
-        # Pula as 8 linhas de metadados
-        for _ in range(8):
-            next(f)
-        
-        # Pula a linha de cabeçalho
-        next(f)
+        for _ in range(8): next(f) # Pula metadados
+        next(f) # Pula cabeçalho
 
-        # Processa o restante do arquivo, linha por linha
         for line in f:
             try:
-                # Tenta separar a linha por ponto e vírgula, que é o mais provável
                 campos = line.strip().split(';')
+                if len(campos) < 7: campos = line.strip().split(',')
                 
-                # Se a linha tiver colunas suficientes, extrai os dados pela posição
                 if len(campos) > 6:
-                    data = campos[0]
-                    hora = campos[1]
-                    radiacao = campos[6] # Coluna G (índice 6)
-                    
-                    dados_extraidos.append([data, hora, radiacao])
+                    dados_extraidos.append([campos[0], campos[1], campos[6]])
             except (IndexError, ValueError):
-                # Se qualquer erro ocorrer ao processar a linha, ignora e continua
                 continue
 
     if not dados_extraidos:
-        raise ValueError("Nenhum dado válido pôde ser extraído do arquivo. Verifique o formato.")
+        raise ValueError(f"Nenhum dado válido pôde ser extraído do arquivo: {path}")
 
-    # Cria um DataFrame limpo a partir dos dados extraídos manualmente
     df_total = pd.DataFrame(dados_extraidos, columns=colunas_finais)
 
-    # O resto da função continua a partir daqui, com um DataFrame garantido e limpo
     coluna_radiacao = 'RADIACAO GLOBAL (Kj/m²)'
+    # A conversão de vírgula para ponto no decimal é importante para alguns arquivos do INMET
     df_total[coluna_radiacao] = pd.to_numeric(df_total[coluna_radiacao].str.replace(',', '.'), errors='coerce').fillna(0)
-    df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='coerce')
+    
+    # --- CORREÇÃO PRINCIPAL APLICADA AQUI ---
+    df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
+    
     df_total.dropna(subset=['Data'], inplace=True)
     min_hour, max_hour = utc_hour_to_int(min_max[0]), utc_hour_to_int(min_max[1])
     cond = df_total['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
@@ -65,9 +55,7 @@ def load_data_solar_hours(path, min_max, use_log, save_cv):
         
     return df_total
 
-# O resto das funções do arquivo (create_windowing, make_metrics_avaliation, etc.)
-# devem ser mantidas aqui para que o código continue funcionando.
-# Esta célula já contém uma versão simplificada delas.
+# O resto das funções do arquivo são mantidas para o código funcionar
 def create_windowing(df, lag_size):
     final_df = None; serie = None
     for i in range(lag_size + 1):
@@ -79,10 +67,10 @@ def create_windowing(df, lag_size):
 def root_mean_square_error(y_true, y_pred):
     return np.sqrt(np.mean(np.square(np.subtract(np.asarray(y_true).flatten(), np.asarray(y_pred).flatten()))))
 
+class result_options: save_result = 3
 def make_metrics_avaliation(y_true, y_pred, test_size, val_size, return_type, model_params, title, prevs_df=None):
     test_metrics = {'RMSE': root_mean_square_error(y_true[-test_size:], y_pred[-test_size:])}
     geral_dict = {'test_metrics': test_metrics, 'params': model_params}
-    class result_options: save_result = 3
     if return_type == result_options.save_result:
         save_result(geral_dict, title)
     return geral_dict.get('test_metrics', {})
@@ -102,4 +90,4 @@ def predict_sklearn_model(ts, model):
     x = ts.drop(columns=['actual'])
     return model.predict(x.values)
 
-print("Arquivo 'src/time_series_functions.py' sobrescrito com a versão final e robusta.")
+print("Arquivo 'src/time_series_functions.py' sobrescrito com a versão final e 100% corrigida.")
