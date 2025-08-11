@@ -108,7 +108,7 @@ def train_sklearn(model_execs, data_title, parameters, model):
             type_data = i['type_data']
             horizon = i['horzion']
             min_max = i['hour_min_max']
-            real = tsf.load_data_solar_hours(i['path_data'], min_max, use_log, True)
+            real = tsf.load_data_solar_hours(i['path_data'], min_max, use_log, False)
             gs_result = do_grid_search(type_data=type_data,
                                        real=real, test_size=test_size,
                                        val_size=val_size,
