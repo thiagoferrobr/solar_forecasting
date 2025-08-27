@@ -8,6 +8,78 @@ import json
 class result_options:
     test_result, val_result, train_result, save_result = 0, 1, 2, 3
 
+
+def root_mean_square_error(y_true, y_pred):
+    return np.sqrt(np.mean(np.square(np.subtract(np.asarray(y_true).flatten(), np.asarray(y_pred).flatten()))))
+
+def mean_absolute_error(y_true, y_pred):
+    return np.mean(np.abs(np.subtract(np.asarray(y_true).flatten(), np.asarray(y_pred).flatten())))
+
+# --- NOVA FUNÇÃO DE MÉTRICA ---
+def r_squared(y_true, y_pred):
+    y_true = np.asarray(y_true).flatten()
+    y_pred = np.asarray(y_pred).flatten()
+    return r2_score(y_true, y_pred)
+
+# --- FUNÇÃO DE MÉTRICAS ATUALIZADA ---
+def gerenerate_metric_results(y_true, y_pred):
+    # Garante que não haja NaNs que possam quebrar as métricas
+    y_true_clean = np.nan_to_num(y_true)
+    y_pred_clean = np.nan_to_num(y_pred)
+    
+    return {'RMSE': root_mean_square_error(y_true_clean, y_pred_clean),
+            'MAE': mean_absolute_error(y_true_clean, y_pred_clean),
+            'R2': r_squared(y_true_clean, y_pred_clean)
+           }
+
+# --- NOVAS FUNÇÕES DE PLOTAGEM ---
+def plot_predictions(y_true, y_pred, title='Comparativo Previsão vs. Real'):
+    plt.style.use('seaborn-v0_8-whitegrid')
+    plt.figure(figsize=(15, 7))
+    plt.plot(y_true, label='Valor Real', color='royalblue', linewidth=2)
+    plt.plot(y_pred, label='Valor Previsto', color='darkorange', linestyle='--')
+    plt.title(title, fontsize=16)
+    plt.xlabel('Amostras de Teste', fontsize=12)
+    plt.ylabel('Irradiância Solar (Kj/m²)', fontsize=12)
+    plt.legend(fontsize=12)
+    plt.show()
+
+def plot_feature_importance(model, features, title='Importância das Features'):
+    if hasattr(model, 'feature_importances_'):
+        importances = model.feature_importances_
+        indices = np.argsort(importances)
+        
+        plt.style.use('seaborn-v0_8-whitegrid')
+        plt.figure(figsize=(10, 8))
+        plt.title(title)
+        plt.barh(range(len(indices)), importances[indices], color='skyblue', align='center')
+        plt.yticks(range(len(indices)), [features[i] for i in indices])
+        plt.xlabel('Importância Relativa')
+        plt.show()
+
+def plot_daily_average(time_series, year):
+    daily_avg = time_series['actual'].resample('D').mean()
+    plt.style.use('seaborn-v0_8-whitegrid')
+    plt.figure(figsize=(15, 5))
+    daily_avg.plot(label='Média Diária', color='teal')
+    plt.title(f'Média Diária de Irradiância Solar - {year}', fontsize=16)
+    plt.ylabel('Irradiância Solar Média (Kj/m²)')
+    plt.xlabel('Data')
+    plt.legend()
+    plt.show()
+
+def plot_monthly_variability(time_series, year):
+    monthly_data = time_series.copy()
+    monthly_data['Mês'] = monthly_data.index.month
+    plt.style.use('seaborn-v0_8-whitegrid')
+    plt.figure(figsize=(12, 6))
+    monthly_data.boxplot(column='actual', by='Mês', grid=True)
+    plt.title(f'Variabilidade Mensal da Irradiância - {year}', fontsize=16)
+    plt.suptitle('') # Remove o título automático do pandas
+    plt.xlabel('Mês')
+    plt.ylabel('Irradiância Solar (Kj/m²)')
+    plt.show()
+
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
