@@ -4,6 +4,9 @@ import pickle as pkl
 import datetime
 import uuid
 import json
+import csv
+from sklearn.metrics import r2_score
+import matplotlib.pyplot as plt
 
 class result_options:
     test_result, val_result, train_result, save_result = 0, 1, 2, 3
@@ -85,23 +88,41 @@ def utc_hour_to_int(x):
 
 def load_data_solar_hours(path, min_max, use_log, save_cv):
     try:
-        df_total = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        # Tenta ler com ';' primeiro, que é o formato original do INMET
+        df_total = pd.read_csv(
+            path, sep=';', decimal=',', encoding='latin-1', 
+            skiprows=8, on_bad_lines='skip', engine='python'
+        )
     except Exception:
-        df_total = pd.read_csv(path, sep=',', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        # Fallback para ',' se o primeiro falhar
+        df_total = pd.read_csv(
+            path, sep=',', encoding='latin-1', 
+            skiprows=8, on_bad_lines='skip', engine='python'
+        )
     
     df_total.columns = [str(col).strip() for col in df_total.columns]
     coluna_radiacao = 'RADIACAO GLOBAL (Kj/m²)'
     
     if coluna_radiacao not in df_total.columns:
-        raise KeyError(f"A coluna '{coluna_radiacao}' não foi encontrada. Colunas disponíveis: {df_total.columns.tolist()}")
+         raise KeyError(f"A coluna '{coluna_radiacao}' não foi encontrada. Colunas: {df_total.columns.tolist()}")
 
+    # Converte a coluna de radiação para número
     df_total[coluna_radiacao] = pd.to_numeric(df_total[coluna_radiacao], errors='coerce').fillna(0)
+    
+    # --- ALTERAÇÃO PRINCIPAL: CONVERSÃO DE UNIDADE ---
+    # Converte de Kj/m² por hora para W/m² (média horária)
+    # 1 W = 1 J/s -> 1 W/m² = 1 J/s*m²
+    # 1 hora = 3600 segundos
+    # Média em W/m² = (Total de Joules / m²) / 3600s
+    # Kj -> J = x1000
+    df_total[coluna_radiacao] = (df_total[coluna_radiacao] * 1000) / 3600
+    # ---------------------------------------------------
     
     # Tenta múltiplos formatos de data para máxima compatibilidade
     try:
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='raise')
+        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
     except ValueError:
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='coerce')
+        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
     
     df_total.dropna(subset=['Data'], inplace=True)
     min_hour, max_hour = utc_hour_to_int(min_max[0]), utc_hour_to_int(min_max[1])
@@ -113,6 +134,7 @@ def load_data_solar_hours(path, min_max, use_log, save_cv):
     
     if save_cv:
         df_total.to_csv(path.replace('.csv', '_solar.csv'))
+        
     return df_total
 
 def create_windowing(df, lag_size):

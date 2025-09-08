@@ -65,7 +65,7 @@ def do_grid_search(type_data, real, test_size, val_size, parameters, model, hori
     return {'best_result': best_result, 'model': best_model}
 
 def train_sklearn(model_execs, data_title, parameters, model):
-    config_path, save_path = './', './solar_rad/'
+    config_path, save_path = './', './solar_rad/', '/content/drive/MyDrive/solar_forecasting_results/'
     with open(f'{config_path}models_configuration_60_20_20.json') as f: data = json.load(f)
     recurvise, use_exegen_future, use_log = False, False, False
     for i in data:
@@ -75,6 +75,7 @@ def train_sklearn(model_execs, data_title, parameters, model):
             real = tsf.load_data_solar_hours(i['path_data'], min_max, use_log, False) # save_cv está False
             gs_result = do_grid_search(type_data=type_data, real=real, test_size=test_size, val_size=val_size, parameters=parameters, model=model, horizon=horizon, recurvise=recurvise, use_exegen_future=use_exegen_future, model_execs=model_execs)
             print(gs_result)
+            print(f"Melhores parâmetros encontrados: {gs_result['model'].get_params()}")
             save_path_actual = f"{save_path}{type_data}-{data_title}/"
             os.makedirs(save_path_actual, exist_ok=True)
             title_temp = f"{type_data}-{data_title}"
