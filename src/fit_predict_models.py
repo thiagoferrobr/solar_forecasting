@@ -64,22 +64,69 @@ def do_grid_search(type_data, real, test_size, val_size, parameters, model, hori
             best_model, best_result[metric], best_result['time_window'] = forecaster, result, params['time_window']
     return {'best_result': best_result, 'model': best_model}
 
-def train_sklearn(model_execs, data_title, parameters, model):
-    config_path, save_path = './', './solar_rad/', '/content/drive/MyDrive/solar_forecasting_results/'
-    with open(f'{config_path}models_configuration_60_20_20.json') as f: data = json.load(f)
-    recurvise, use_exegen_future, use_log = False, False, False
-    for i in data:
-        if i.get('activate', 0) == 1:
-            print(i['name']); print(i['path_data'])
-            test_size, val_size, type_data, horizon, min_max = i['test_size'], i['val_size'], i['type_data'], i['horzion'], i['hour_min_max']
-            real = tsf.load_data_solar_hours(i['path_data'], min_max, use_log, False) # save_cv está False
-            gs_result = do_grid_search(type_data=type_data, real=real, test_size=test_size, val_size=val_size, parameters=parameters, model=model, horizon=horizon, recurvise=recurvise, use_exegen_future=use_exegen_future, model_execs=model_execs)
-            print(gs_result)
-            print(f"Melhores parâmetros encontrados: {gs_result['model'].get_params()}")
-            save_path_actual = f"{save_path}{type_data}-{data_title}/"
-            os.makedirs(save_path_actual, exist_ok=True)
-            title_temp = f"{type_data}-{data_title}"
-            for _ in range(model_execs):
-                single_model(f"{save_path_actual}{title_temp}", type_data, gs_result['best_result']['time_window'], real, gs_result['model'], test_size, val_size, tsf.result_options.save_result, True, horizon, recurvise, use_exegen_future)
+# CÉLULA FINAL: ANÁLISE GRÁFICA E SUMÁRIO COMPLETO (ANO A ANO)
 
-print("Arquivo 'src/fit_predict_models.py' sobrescrito com a versão final.")
+import glob
+import pandas as pd
+import os
+from src import time_series_functions as tsf
+import pickle
+
+print("--- Gerando Análise Final e Sumário Comparativo Ano a Ano ---")
+
+result_files = glob.glob('./solar_rad/**/*.pkl', recursive=True)
+results_summary = []
+
+for f_path in result_files:
+    try:
+        model_name_full = os.path.basename(os.path.dirname(f_path)).split('-', 1)[1]
+        
+        with open(f_path, 'rb') as f:
+            result_data = pickle.load(f)
+
+        # --- LÓGICA DE EXTRAÇÃO DO ANO CORRIGIDA ---
+        # Lê o ano diretamente dos parâmetros salvos no arquivo .pkl
+        params = result_data.get('params', {})
+        year = params.get('year', 'Desconhecido') # Pega o ano ou 'Desconhecido' se não encontrar
+
+        test_metrics = result_data.get('test_metrics', {})
+
+        results_summary.append({
+            'Ano': year,
+            'Modelo': model_name_full.upper(),
+            'RMSE': test_metrics.get('RMSE', float('nan')),
+            'MAE': test_metrics.get('MAE', float('nan')),
+            'R2': test_metrics.get('R2', float('nan'))
+        })
+
+    except Exception as e:
+        print(f"Não foi possível processar o arquivo {f_path}: {e}")
+
+# Gera o DataFrame consolidado com todos os resultados
+if results_summary:
+    df_summary = pd.DataFrame(results_summary)
+    # Garante que a coluna 'Ano' seja numérica para ordenação
+    df_summary['Ano'] = pd.to_numeric(df_summary['Ano'], errors='coerce')
+    df_summary.dropna(subset=['Ano'], inplace=True)
+    df_summary['Ano'] = df_summary['Ano'].astype(int)
+
+    # --- TABELA 1: RESUMO ANO A ANO ---
+    print("\n--- Tabela Comparativa Ano a Ano ---")
+    df_yearly = df_summary.pivot_table(index='Modelo', columns='Ano', values='RMSE')
+    print(df_yearly.to_string(formatters={col: '{:,.2f}'.format for col in df_yearly.columns}))
+
+    # --- TABELA 2: RESUMO CONSOLIDADO POR MODELO ---
+    print("\n\n--- Tabela Consolidada (Média Geral) ---")
+    df_final_summary = df_summary.groupby('Modelo').mean().sort_values('RMSE')
+    # Remove a coluna 'Ano' da média final
+    df_final_summary = df_final_summary.drop(columns='Ano', errors='ignore')
+    print(df_final_summary.to_string(formatters={
+        'RMSE': '{:,.2f}'.format,
+        'MAE': '{:,.2f}'.format,
+        'R2': '{:,.3f}'.format
+    }))
+
+    # Salva os resultados para referência futura
+    df_summary.to_csv('./analise_resultados_completa.csv', index=False)
+else:
+    print("Nenhum arquivo de resultado encontrado para gerar o sumário.")
