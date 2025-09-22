@@ -84,7 +84,7 @@ def train_sklearn(model_execs, data_title, parameters, model):
     for i in data:
         if i.get('activate', 0) == 1:
             print(f"\nProcessando: {i['name']}")
-            real = tsf.load_univariate_data(i['path_data'], i['hour_min_max'])
+            real = tsf.load_data_solar_hours(i['path_data'], i['hour_min_max'])
             
             gs_result = do_grid_search(type_data=i['type_data'], real=real, test_size=i['test_size'],
                                        val_size=i['val_size'], parameters=parameters, model=model,
