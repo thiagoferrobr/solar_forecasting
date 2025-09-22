@@ -4,14 +4,9 @@ import pickle as pkl
 import datetime
 import uuid
 import json
-import csv
 from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-# ==============================================================================
-#               ARQUIVO FINAL COM FUNÇÃO DE LEITURA SUPER ROBUSTA
-# ==============================================================================
 
 class result_options:
     test_result, val_result, train_result, save_result = 0, 1, 2, 3
@@ -19,6 +14,9 @@ class result_options:
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
+# ==============================================================================
+#               FUNÇÃO DE PRÉ-TRATAMENTO COM VALIDAÇÃO AUTOMÁTICA
+# ==============================================================================
 def find_and_rename_columns(df):
     COLUMN_MAP = {
         'RADIACAO GLOBAL': 'actual', 'TEMPERATURA DO AR': 'temperatura',
@@ -31,28 +29,43 @@ def find_and_rename_columns(df):
                 rename_dict[col_name] = std_name; break
     return df.rename(columns=rename_dict)
 
-def load_and_clean_data(path, hour_min_max):
+def load_and_validate_data(path, hour_min_max):
+    """
+    Carrega, limpa, valida as features e retorna o dataframe limpo
+    junto com uma lista de features que passaram na validação.
+    """
     try:
         df = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     except Exception:
-        df = pd.read_csv(path, sep=',', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        df = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     
     df.columns = [str(col).strip() for col in df.columns]
     df = find_and_rename_columns(df)
     
-    expected_cols = ['actual', 'temperatura', 'umidade', 'vento_velocidade']
-    for col in expected_cols:
-        if col not in df.columns: raise KeyError(f"Coluna padrão '{col}' não encontrada.")
+    all_possible_features = ['temperatura', 'umidade', 'vento_velocidade']
+    expected_cols = ['actual'] + all_possible_features
     
-    # --- CORREÇÃO DEFINITIVA NO TRATAMENTO NUMÉRICO ---
     for col in expected_cols:
-        # Primeiro, garante que a coluna é do tipo string e substitui vírgula por ponto
-        df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
-        # Depois, converte para numérico
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    # --------------------------------------------------
+        if col not in df.columns: df[col] = np.nan
 
-    df[expected_cols] = df[expected_cols].ffill().bfill()
+    for col in expected_cols:
+        if df[col].dtype == 'object':
+            df[col] = df[col].str.replace(',', '.', regex=False)
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # --- VALIDAÇÃO DAS FEATURES ---
+    valid_features = []
+    for col in all_possible_features:
+        # Uma feature é válida se tiver menos de 10% de valores nulos e alguma variação
+        if df[col].notna().sum() / len(df) > 0.9 and df[col].std() > 0.1:
+            valid_features.append(col)
+    
+    print(f"Features válidas encontradas neste arquivo: {valid_features if valid_features else 'Nenhuma'}")
+    
+    # Preenche NaNs apenas nas colunas que vamos usar
+    cols_to_use = ['actual'] + valid_features
+    df[cols_to_use] = df[cols_to_use].ffill().bfill()
+    
     df['actual'] = (df['actual'] * 1000) / 3600 # W/m²
     
     try:
@@ -65,8 +78,9 @@ def load_and_clean_data(path, hour_min_max):
     cond = df['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
     df = df[cond]
     
-    df = df.set_index('Data')[expected_cols]
-    return df
+    df = df.set_index('Data')[cols_to_use]
+    return df, valid_features
+
     
 def create_multivariate_dataset(data, look_back=12):
     dataX, dataY = [], []
