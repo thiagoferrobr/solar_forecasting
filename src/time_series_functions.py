@@ -165,3 +165,4 @@ def save_result(dict_result, title):
 
 def open_saved_result(file_name):
     with open(file_name, 'rb') as handle: return pkl.load(handle)
+    
