@@ -14,10 +14,10 @@ import seaborn as sns # Adicionamos o seaborn para gráficos mais elaborados
 # ==============================================================================
 
 class result_options:
-    # ... (código da classe) ...
+  test_result, val_result, train_result, save_result = 0, 1, 2, 3
 
 def utc_hour_to_int(x):
-    # ... (código da função) ...
+    return int(str(x).split(' ')[0])
 
 def find_and_rename_columns(df):
     """
