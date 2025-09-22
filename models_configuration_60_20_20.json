@@ -6,7 +6,7 @@
     "val_size": 951,
     "type_data": 1,
     "horzion": 1,
-    "hour_min_max": ["0900 UTC", "2100 UTC"],
+    "hour_min_max": ["0800 UTC", "2200 UTC"],
     "activate": 1
   },
   {
@@ -16,7 +16,7 @@
     "val_size": 951,
     "type_data": 1,
     "horzion": 1,
-    "hour_min_max": ["0900 UTC", "2100 UTC"],
+    "hour_min_max": ["0800 UTC", "2200 UTC"],
     "activate": 1
   },
   {
@@ -26,7 +26,7 @@
     "val_size": 951,
     "type_data": 1,
     "horzion": 1,
-    "hour_min_max": ["0900 UTC", "2100 UTC"],
+    "hour_min_max": ["0800 UTC", "2200 UTC"],
     "activate": 1
   },
   {
@@ -36,7 +36,7 @@
     "val_size": 951,
     "type_data": 1,
     "horzion": 1,
-    "hour_min_max": ["0900 UTC", "2100 UTC"],
+    "hour_min_max": ["0800 UTC", "2200 UTC"],
     "activate": 1
   }
 ]
