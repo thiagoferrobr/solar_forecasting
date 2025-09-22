@@ -7,76 +7,54 @@ import json
 import csv
 from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
-import seaborn as sns # Adicionamos o seaborn para gráficos mais elaborados
+import seaborn as sns
 
 # ==============================================================================
-#               ARQUIVO FINAL COM FUNÇÃO DE LEITURA INTELIGENTE
+#               ARQUIVO FINAL COM FUNÇÃO DE LEITURA SUPER ROBUSTA
 # ==============================================================================
 
 class result_options:
-  test_result, val_result, train_result, save_result = 0, 1, 2, 3
+    test_result, val_result, train_result, save_result = 0, 1, 2, 3
 
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
 def find_and_rename_columns(df):
-    """
-    Identifica colunas por palavras-chave e as renomeia para um padrão fixo.
-    """
-    # Mapeamento de palavras-chave para nomes padrão
     COLUMN_MAP = {
-        'RADIACAO GLOBAL': 'actual',
-        'TEMPERATURA DO AR': 'temperatura',
-        'UMIDADE RELATIVA DO AR': 'umidade',
-        'VENTO, VELOCIDADE': 'vento_velocidade'
+        'RADIACAO GLOBAL': 'actual', 'TEMPERATURA DO AR': 'temperatura',
+        'UMIDADE RELATIVA DO AR': 'umidade', 'VENTO, VELOCIDADE': 'vento_velocidade'
     }
-    
     rename_dict = {}
-    original_cols = df.columns
-    
-    for keyword, standard_name in COLUMN_MAP.items():
-        found = False
-        for col_name in original_cols:
+    for keyword, std_name in COLUMN_MAP.items():
+        for col_name in df.columns:
             if keyword in col_name:
-                rename_dict[col_name] = standard_name
-                found = True
-                break
-        if not found:
-            print(f"Aviso: Coluna com a palavra-chave '{keyword}' não foi encontrada.")
-            
+                rename_dict[col_name] = std_name; break
     return df.rename(columns=rename_dict)
 
 def load_and_clean_data(path, hour_min_max):
-    """
-    Carrega dados do INMET, identifica, renomeia e limpa as colunas automaticamente.
-    """
     try:
         df = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     except Exception:
-        df = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        df = pd.read_csv(path, sep=',', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     
     df.columns = [str(col).strip() for col in df.columns]
-    
-    # Renomeia as colunas para o padrão
     df = find_and_rename_columns(df)
     
-    # Define as colunas que esperamos ter após a renomeação
     expected_cols = ['actual', 'temperatura', 'umidade', 'vento_velocidade']
+    for col in expected_cols:
+        if col not in df.columns: raise KeyError(f"Coluna padrão '{col}' não encontrada.")
     
-    # Verifica se as colunas essenciais existem
+    # --- CORREÇÃO DEFINITIVA NO TRATAMENTO NUMÉRICO ---
     for col in expected_cols:
-        if col not in df.columns:
-            raise KeyError(f"A coluna padrão '{col}' não pôde ser criada. Verifique os nomes das colunas no arquivo original.")
-
-    # Converte para numérico e preenche dados faltantes
-    for col in expected_cols:
+        # Primeiro, garante que a coluna é do tipo string e substitui vírgula por ponto
+        df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+        # Depois, converte para numérico
         df[col] = pd.to_numeric(df[col], errors='coerce')
+    # --------------------------------------------------
+
     df[expected_cols] = df[expected_cols].ffill().bfill()
+    df['actual'] = (df['actual'] * 1000) / 3600 # W/m²
     
-    # Converte para W/m²
-    df['actual'] = (df['actual'] * 1000) / 3600
-    
-    # Processa data e hora
     try:
         df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
     except (ValueError, TypeError):
@@ -88,7 +66,6 @@ def load_and_clean_data(path, hour_min_max):
     df = df[cond]
     
     df = df.set_index('Data')[expected_cols]
-        
     return df
     
 def create_multivariate_dataset(data, look_back=12):
