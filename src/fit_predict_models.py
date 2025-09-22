@@ -1,3 +1,4 @@
+%%writefile src/fit_predict_models.py
 import os
 import json
 import pandas as pd
@@ -42,10 +43,13 @@ def single_model(title, type_data, time_window, time_series, model, test_size,
     else:
         pred_unnormalized = pred_normalized.copy()
 
-    # Adiciona o objeto do modelo e outros dados ao dicionário de parâmetros para salvamento
     params_to_save = model.get_params(deep=True)
-    params_to_save['year'] = title.split('_')[-1].split('(')[0] # Extrai o ano do título
-    params_to_save['model_object'] = reg # Salva o objeto do modelo treinado
+    try:
+        year = title.split('_')[-1].split('(')[0]
+        params_to_save['year'] = year
+    except:
+        pass
+    params_to_save['model_object'] = reg
     
     results = tsf.make_metrics_avaliation(
         ts_atu_unnormalized, pred_unnormalized,
@@ -70,21 +74,22 @@ def do_grid_search(type_data, real, test_size, val_size, parameters, model, hori
         result = np.mean(np.array(result_atual))
         
         if best_result[metric] is None or best_result[metric] > result:
-            best_model = forecaster
-            best_result[metric] = result
-            best_result['time_window'] = time_window
+            best_model, best_result[metric], best_result['time_window'] = forecaster, result, time_window
             
     return {'best_result': best_result, 'model': best_model}
 
 def train_sklearn(model_execs, data_title, parameters, model):
     config_path, save_path = './', './solar_rad/'
     with open(f'{config_path}models_configuration_60_20_20.json') as f: data = json.load(f)
-    use_log = False
     
     for i in data:
         if i.get('activate', 0) == 1:
             print(f"\nProcessando: {i['name']}")
-            real = tsf.load_data_solar_hours(i['path_data'], i['hour_min_max'])
+
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Adicionamos os dois argumentos que faltavam (use_log e save_cv) com o valor False
+            real = tsf.load_data_solar_hours(i['path_data'], i['hour_min_max'], False, False)
+            # -----------------------------
             
             gs_result = do_grid_search(type_data=i['type_data'], real=real, test_size=i['test_size'],
                                        val_size=i['val_size'], parameters=parameters, model=model,
@@ -92,12 +97,14 @@ def train_sklearn(model_execs, data_title, parameters, model):
                                        model_execs=model_execs)
             
             print(gs_result)
+            print(f"Melhores parâmetros encontrados para {data_title}: {gs_result['model'].get_params()}")
             
             save_path_actual = f"{save_path}{i['type_data']}-{data_title}/"
             os.makedirs(save_path_actual, exist_ok=True)
             title_temp = f"{i['type_data']}-{data_title}_{i['name'].split('_')[-1]}"
             
-            # Executa uma vez final para salvar o resultado
             single_model(f"{save_path_actual}{title_temp}", i['type_data'], gs_result['best_result']['time_window'],
                          real, gs_result['model'], i['test_size'], i['val_size'],
                          tsf.result_options.save_result, True, i['horzion'])
+
+print("Arquivo 'src/fit_predict_models.py' restaurado e corrigido com sucesso.")
