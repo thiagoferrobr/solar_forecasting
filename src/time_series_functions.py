@@ -14,22 +14,24 @@ class result_options:
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
-# ==============================================================================
-#               FUNÇÃO 1: APENAS PARA ANÁLISE UNIVARIADA
-# ==============================================================================
 def load_univariate_data(path, hour_min_max):
     """ Carrega e limpa os dados especificamente para a análise univariada. """
-    df = pd.read_csv(
-        path, sep=';', decimal=',', encoding='latin-1', 
-        skiprows=8, on_bad_lines='skip', engine='python'
-    )
+    try:
+        df = pd.read_csv(path, sep=';', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+    except Exception:
+        df = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        
     df.columns = [str(col).strip() for col in df.columns]
     
-    coluna_radiacao = next((col for col in df.columns if 'RADIACAO GLOBAL' in col), None)
-    if not coluna_radiacao: raise KeyError("Coluna 'RADIACAO GLOBAL' não encontrada.")
+    coluna_radiacao_keyword = 'RADIACAO GLOBAL'
+    coluna_radiacao = next((col for col in df.columns if coluna_radiacao_keyword in col), None)
+    if not coluna_radiacao: raise KeyError(f"Coluna contendo '{coluna_radiacao_keyword}' não foi encontrada.")
+
+    if df[coluna_radiacao].dtype == 'object':
+        df[coluna_radiacao] = df[coluna_radiacao].str.replace(',', '.', regex=False)
+    df[coluna_radiacao] = pd.to_numeric(df[coluna_radiacao], errors='coerce').fillna(0)
 
     df.rename(columns={coluna_radiacao: 'actual'}, inplace=True)
-    df['actual'] = pd.to_numeric(df['actual'], errors='coerce').fillna(0)
     df['actual'] = (df['actual'] * 1000) / 3600 # Converte para W/m²
 
     try:
@@ -44,20 +46,18 @@ def load_univariate_data(path, hour_min_max):
     df = df[cond].set_index('Data')[['actual']]
     return df
 
-# ==============================================================================
-#               FUNÇÃO 2: APENAS PARA ANÁLISE MULTIVARIADA
-# ==============================================================================
 def find_col_by_substring(columns, substring):
     for col in columns:
         if substring in col: return col
     return None
 
-def load_multivariate_data(path, hour_min_max):
-    """ Carrega, limpa e valida features para a análise multivariada. """
-    df = pd.read_csv(
-        path, sep=';', decimal=',', encoding='latin-1', 
-        skiprows=8, on_bad_lines='skip', engine='python'
-    )
+def load_and_validate_data(path, hour_min_max):
+    """ Carrega, limpa, valida features e retorna o dataframe limpo e a lista de features válidas. """
+    try:
+        df = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+    except Exception:
+        df = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+    
     df.columns = [str(col).strip() for col in df.columns]
     
     COLUMN_MAP = {'RADIACAO GLOBAL': 'actual', 'TEMPERATURA DO AR': 'temperatura',
@@ -66,18 +66,31 @@ def load_multivariate_data(path, hour_min_max):
     df = df.rename(columns=rename_dict)
     
     all_possible_features = ['temperatura', 'umidade', 'vento_velocidade']
+    expected_cols = ['actual'] + all_possible_features
+    
+    for col in expected_cols:
+        if col not in df.columns: df[col] = np.nan
+
+    for col in expected_cols:
+        if df[col].dtype == 'object':
+            df[col] = df[col].str.replace(',', '.', regex=False)
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
     valid_features = []
     for col in all_possible_features:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
-            if df[col].notna().sum() / len(df) > 0.9 and df[col].std() > 0.1:
-                valid_features.append(col)
-
-    print(f"Features válidas encontradas: {valid_features if valid_features else 'Nenhuma'}")
+        if col in df.columns and df[col].notna().sum() / len(df) > 0.9 and df[col].std() > 0.1:
+            valid_features.append(col)
+    
+    print(f"Features válidas encontradas neste arquivo: {valid_features if valid_features else 'Nenhuma'}")
     
     cols_to_use = ['actual'] + valid_features
     for col in cols_to_use:
-        if df[col].isnull().any(): df[col] = df[col].ffill().bfill()
+        if df[col].isnull().any():
+            if df[col].isnull().all():
+                print(f"AVISO: A coluna '{col}' está completamente vazia e será preenchida com 0.")
+                df[col] = 0
+            else:
+                df[col] = df[col].ffill().bfill()
             
     df['actual'] = (df['actual'] * 1000) / 3600
     
@@ -92,8 +105,18 @@ def load_multivariate_data(path, hour_min_max):
     
     df = df[cond].set_index('Data')[cols_to_use]
     return df, valid_features
-    
+
+def create_windowing(df, lag_size):
+    """ Função de janelamento para modelos Scikit-learn (univariado). """
+    final_df = None
+    for i in range(lag_size + 1):
+        serie = df.shift(i)
+        serie.columns = ['actual'] if i == 0 else [f'lag{i}']
+        final_df = pd.concat([serie, final_df], axis=1)
+    return final_df.dropna()
+
 def create_multivariate_dataset(data, look_back=12):
+    """ Cria um dataset no formato de janela para previsão multivariada (DL). """
     dataX, dataY = [], []
     for i in range(len(data) - look_back - 1):
         a = data[i:(i + look_back), :]
@@ -117,15 +140,12 @@ def gerenerate_metric_results(y_true, y_pred):
             'MAE': mean_absolute_error(y_true_clean, y_pred_clean),
             'R2': r_squared(y_true_clean, y_pred_clean)}
 
-# --- FUNÇÃO make_metrics_avaliation INCLUÍDA AQUI ---
 def make_metrics_avaliation(y_true, y_pred, test_size, val_size, return_type, model_params, title):
-    # Alinhamento dos vetores de previsão
-    y_true_test = y_true[-len(y_pred):] # Garante que y_true tenha o mesmo tamanho de y_pred
+    y_pred_aligned = y_pred[-test_size:]
+    y_true_aligned = y_true[-test_size:]
     
-    # Calcula as métricas apenas no conjunto de teste
-    test_metrics = gerenerate_metric_results(y_true_test, y_pred)
+    test_metrics = gerenerate_metric_results(y_true_aligned, y_pred_aligned)
     
-    # Adiciona os vetores completos e os parâmetros para salvamento
     geral_dict = {
         'test_metrics': test_metrics, 
         'params': model_params,
@@ -137,7 +157,6 @@ def make_metrics_avaliation(y_true, y_pred, test_size, val_size, return_type, mo
         save_result(geral_dict, title)
         
     return geral_dict.get('test_metrics', {})
-# ----------------------------------------------------
 
 def save_result(dict_result, title):
     title = f"{title}-{uuid.uuid4()}.pkl"
@@ -146,5 +165,3 @@ def save_result(dict_result, title):
 
 def open_saved_result(file_name):
     with open(file_name, 'rb') as handle: return pkl.load(handle)
-
-print("Arquivo 'src/time_series_functions.py' sobrescrito com a versão final e completa.")
