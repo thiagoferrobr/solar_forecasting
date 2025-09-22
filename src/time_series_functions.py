@@ -7,75 +7,90 @@ import json
 import csv
 from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
+import seaborn as sns # Adicionamos o seaborn para gráficos mais elaborados
 
+# ==============================================================================
+#               ARQUIVO FINAL COM FUNÇÃO DE LEITURA INTELIGENTE
+# ==============================================================================
 
 class result_options:
-    test_result, val_result, train_result, save_result = 0, 1, 2, 3
+    # ... (código da classe) ...
 
 def utc_hour_to_int(x):
-    return int(str(x).split(' ')[0])
+    # ... (código da função) ...
 
-# --- Nova função auxiliar para encontrar colunas ---
-def find_col_by_substring(columns, substring):
-    """ Encontra o nome completo de uma coluna em uma lista a partir de uma substring. """
-    for col in columns:
-        if substring in col:
-            return col
-    return None
-
-def load_multivariate_data(path, hour_min_max):
+def find_and_rename_columns(df):
     """
-    Carrega e pré-processa dados multivariados de forma robusta,
-    encontrando as colunas por palavras-chave.
+    Identifica colunas por palavras-chave e as renomeia para um padrão fixo.
+    """
+    # Mapeamento de palavras-chave para nomes padrão
+    COLUMN_MAP = {
+        'RADIACAO GLOBAL': 'actual',
+        'TEMPERATURA DO AR': 'temperatura',
+        'UMIDADE RELATIVA DO AR': 'umidade',
+        'VENTO, VELOCIDADE': 'vento_velocidade'
+    }
+    
+    rename_dict = {}
+    original_cols = df.columns
+    
+    for keyword, standard_name in COLUMN_MAP.items():
+        found = False
+        for col_name in original_cols:
+            if keyword in col_name:
+                rename_dict[col_name] = standard_name
+                found = True
+                break
+        if not found:
+            print(f"Aviso: Coluna com a palavra-chave '{keyword}' não foi encontrada.")
+            
+    return df.rename(columns=rename_dict)
+
+def load_and_clean_data(path, hour_min_max):
+    """
+    Carrega dados do INMET, identifica, renomeia e limpa as colunas automaticamente.
     """
     try:
-        df_total = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        df = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     except Exception:
-        df_total = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+        df = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     
-    df_total.columns = [str(col).strip() for col in df_total.columns]
+    df.columns = [str(col).strip() for col in df.columns]
     
-    # --- LÓGICA DE BUSCA POR PALAVRAS-CHAVE ---
-    target_col_name = find_col_by_substring(df_total.columns, 'RADIACAO GLOBAL')
-    temp_col_name = find_col_by_substring(df_total.columns, 'TEMPERATURA DO AR')
-    umid_col_name = find_col_by_substring(df_total.columns, 'UMIDADE RELATIVA DO AR')
-    vento_col_name = find_col_by_substring(df_total.columns, 'VENTO, VELOCIDADE')
+    # Renomeia as colunas para o padrão
+    df = find_and_rename_columns(df)
     
-    # Valida se todas as colunas essenciais foram encontradas
-    required_cols = {'Irradiância': target_col_name, 'Temperatura': temp_col_name, 
-                     'Umidade': umid_col_name, 'Vento': vento_col_name}
-    for key, val in required_cols.items():
-        if val is None:
-            raise KeyError(f"Não foi possível encontrar a coluna de '{key}' no arquivo: {path}")
+    # Define as colunas que esperamos ter após a renomeação
+    expected_cols = ['actual', 'temperatura', 'umidade', 'vento_velocidade']
     
-    feature_cols = [temp_col_name, umid_col_name, vento_col_name]
-    # ----------------------------------------------
+    # Verifica se as colunas essenciais existem
+    for col in expected_cols:
+        if col not in df.columns:
+            raise KeyError(f"A coluna padrão '{col}' não pôde ser criada. Verifique os nomes das colunas no arquivo original.")
 
-    df_total[target_col_name] = pd.to_numeric(df_total[target_col_name], errors='coerce')
-    df_total[target_col_name] = (df_total[target_col_name] * 1000) / 3600 # W/m²
+    # Converte para numérico e preenche dados faltantes
+    for col in expected_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    df[expected_cols] = df[expected_cols].ffill().bfill()
     
-    for col in feature_cols:
-        df_total[col] = pd.to_numeric(df_total[col], errors='coerce')
-
-    all_cols = [target_col_name] + feature_cols
-    df_total[all_cols] = df_total[all_cols].ffill().bfill()
-
+    # Converte para W/m²
+    df['actual'] = (df['actual'] * 1000) / 3600
+    
+    # Processa data e hora
     try:
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
+        df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
     except (ValueError, TypeError):
-        df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
+        df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
     
-    df_total.dropna(subset=['Data'], inplace=True)
+    df.dropna(subset=['Data'], inplace=True)
     min_hour, max_hour = utc_hour_to_int(hour_min_max[0]), utc_hour_to_int(hour_min_max[1])
-    cond = df_total['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
-    df_total = df_total[cond]
+    cond = df['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
+    df = df[cond]
     
-    df_total.rename(columns={target_col_name: 'actual'}, inplace=True)
-    final_cols_renamed = ['actual'] + feature_cols
-    df_total = df_total.set_index('Data')[final_cols_renamed]
+    df = df.set_index('Data')[expected_cols]
         
-    return df_total
-
+    return df
+    
 def create_multivariate_dataset(data, look_back=12):
     dataX, dataY = [], []
     for i in range(len(data) - look_back - 1):
