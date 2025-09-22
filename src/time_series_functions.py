@@ -15,72 +15,83 @@ def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
 # ==============================================================================
-#               FUNÇÃO DE PRÉ-TRATAMENTO COM VALIDAÇÃO AUTOMÁTICA
+#               FUNÇÃO 1: APENAS PARA ANÁLISE UNIVARIADA
 # ==============================================================================
-def find_and_rename_columns(df):
-    COLUMN_MAP = {
-        'RADIACAO GLOBAL': 'actual', 'TEMPERATURA DO AR': 'temperatura',
-        'UMIDADE RELATIVA DO AR': 'umidade', 'VENTO, VELOCIDADE': 'vento_velocidade'
-    }
-    rename_dict = {}
-    for keyword, std_name in COLUMN_MAP.items():
-        for col_name in df.columns:
-            if keyword in col_name:
-                rename_dict[col_name] = std_name; break
-    return df.rename(columns=rename_dict)
-
-def load_and_validate_data(path, hour_min_max):
-    """
-    Carrega, limpa, valida as features e retorna o dataframe limpo
-    junto com uma lista de features que passaram na validação.
-    """
-    try:
-        df = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
-    except Exception:
-        df = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
-    
+def load_univariate_data(path, hour_min_max):
+    """ Carrega e limpa os dados especificamente para a análise univariada. """
+    df = pd.read_csv(
+        path, sep=';', decimal=',', encoding='latin-1', 
+        skiprows=8, on_bad_lines='skip', engine='python'
+    )
     df.columns = [str(col).strip() for col in df.columns]
-    df = find_and_rename_columns(df)
+    
+    coluna_radiacao = next((col for col in df.columns if 'RADIACAO GLOBAL' in col), None)
+    if not coluna_radiacao: raise KeyError("Coluna 'RADIACAO GLOBAL' não encontrada.")
+
+    df.rename(columns={coluna_radiacao: 'actual'}, inplace=True)
+    df['actual'] = pd.to_numeric(df['actual'], errors='coerce').fillna(0)
+    df['actual'] = (df['actual'] * 1000) / 3600 # Converte para W/m²
+
+    try:
+        df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
+    except (ValueError, TypeError):
+        df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
+        
+    df.dropna(subset=['Data'], inplace=True)
+    min_hour, max_hour = utc_hour_to_int(hour_min_max[0]), utc_hour_to_int(hour_min_max[1])
+    cond = df['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
+    
+    df = df[cond].set_index('Data')[['actual']]
+    return df
+
+# ==============================================================================
+#               FUNÇÃO 2: APENAS PARA ANÁLISE MULTIVARIADA
+# ==============================================================================
+def find_col_by_substring(columns, substring):
+    for col in columns:
+        if substring in col: return col
+    return None
+
+def load_multivariate_data(path, hour_min_max):
+    """ Carrega, limpa e valida features para a análise multivariada. """
+    df = pd.read_csv(
+        path, sep=';', decimal=',', encoding='latin-1', 
+        skiprows=8, on_bad_lines='skip', engine='python'
+    )
+    df.columns = [str(col).strip() for col in df.columns]
+    
+    COLUMN_MAP = {'RADIACAO GLOBAL': 'actual', 'TEMPERATURA DO AR': 'temperatura',
+                  'UMIDADE RELATIVA DO AR': 'umidade', 'VENTO, VELOCIDADE': 'vento_velocidade'}
+    rename_dict = {find_col_by_substring(df.columns, k): v for k, v in COLUMN_MAP.items() if find_col_by_substring(df.columns, k)}
+    df = df.rename(columns=rename_dict)
     
     all_possible_features = ['temperatura', 'umidade', 'vento_velocidade']
-    expected_cols = ['actual'] + all_possible_features
-    
-    for col in expected_cols:
-        if col not in df.columns: df[col] = np.nan
-
-    for col in expected_cols:
-        if df[col].dtype == 'object':
-            df[col] = df[col].str.replace(',', '.', regex=False)
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    # --- VALIDAÇÃO DAS FEATURES ---
     valid_features = []
     for col in all_possible_features:
-        # Uma feature é válida se tiver menos de 10% de valores nulos e alguma variação
-        if df[col].notna().sum() / len(df) > 0.9 and df[col].std() > 0.1:
-            valid_features.append(col)
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+            if df[col].notna().sum() / len(df) > 0.9 and df[col].std() > 0.1:
+                valid_features.append(col)
+
+    print(f"Features válidas encontradas: {valid_features if valid_features else 'Nenhuma'}")
     
-    print(f"Features válidas encontradas neste arquivo: {valid_features if valid_features else 'Nenhuma'}")
-    
-    # Preenche NaNs apenas nas colunas que vamos usar
     cols_to_use = ['actual'] + valid_features
-    df[cols_to_use] = df[cols_to_use].ffill().bfill()
-    
-    df['actual'] = (df['actual'] * 1000) / 3600 # W/m²
+    for col in cols_to_use:
+        if df[col].isnull().any(): df[col] = df[col].ffill().bfill()
+            
+    df['actual'] = (df['actual'] * 1000) / 3600
     
     try:
         df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
     except (ValueError, TypeError):
         df['Data'] = pd.to_datetime(df['Data'] + ' ' + df['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
-    
+        
     df.dropna(subset=['Data'], inplace=True)
     min_hour, max_hour = utc_hour_to_int(hour_min_max[0]), utc_hour_to_int(hour_min_max[1])
     cond = df['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
-    df = df[cond]
     
-    df = df.set_index('Data')[cols_to_use]
+    df = df[cond].set_index('Data')[cols_to_use]
     return df, valid_features
-
     
 def create_multivariate_dataset(data, look_back=12):
     dataX, dataY = [], []
