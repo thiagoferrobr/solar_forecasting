@@ -1,4 +1,3 @@
-%%writefile src/fit_predict_models.py
 import os
 import json
 import pandas as pd
