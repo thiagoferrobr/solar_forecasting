@@ -8,9 +8,6 @@ import csv
 from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
 
-# ==============================================================================
-#               VERSÃO FINAL COMPLETA DE TODAS AS FUNÇÕES
-# ==============================================================================
 
 class result_options:
     test_result, val_result, train_result, save_result = 0, 1, 2, 3
@@ -18,31 +15,65 @@ class result_options:
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
-def load_multivariate_data(path, target_col, feature_cols, hour_min_max):
-    # (Função multivariada que já corrigimos)
+# --- Nova função auxiliar para encontrar colunas ---
+def find_col_by_substring(columns, substring):
+    """ Encontra o nome completo de uma coluna em uma lista a partir de uma substring. """
+    for col in columns:
+        if substring in col:
+            return col
+    return None
+
+def load_multivariate_data(path, hour_min_max):
+    """
+    Carrega e pré-processa dados multivariados de forma robusta,
+    encontrando as colunas por palavras-chave.
+    """
     try:
         df_total = pd.read_csv(path, sep=';', decimal=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
     except Exception:
         df_total = pd.read_csv(path, sep=',', encoding='latin-1', skiprows=8, on_bad_lines='skip', engine='python')
+    
     df_total.columns = [str(col).strip() for col in df_total.columns]
-    if target_col not in df_total.columns: raise KeyError(f"A coluna alvo '{target_col}' não foi encontrada.")
-    df_total[target_col] = pd.to_numeric(df_total[target_col], errors='coerce')
-    df_total[target_col] = (df_total[target_col] * 1000) / 3600
+    
+    # --- LÓGICA DE BUSCA POR PALAVRAS-CHAVE ---
+    target_col_name = find_col_by_substring(df_total.columns, 'RADIACAO GLOBAL')
+    temp_col_name = find_col_by_substring(df_total.columns, 'TEMPERATURA DO AR')
+    umid_col_name = find_col_by_substring(df_total.columns, 'UMIDADE RELATIVA DO AR')
+    vento_col_name = find_col_by_substring(df_total.columns, 'VENTO, VELOCIDADE')
+    
+    # Valida se todas as colunas essenciais foram encontradas
+    required_cols = {'Irradiância': target_col_name, 'Temperatura': temp_col_name, 
+                     'Umidade': umid_col_name, 'Vento': vento_col_name}
+    for key, val in required_cols.items():
+        if val is None:
+            raise KeyError(f"Não foi possível encontrar a coluna de '{key}' no arquivo: {path}")
+    
+    feature_cols = [temp_col_name, umid_col_name, vento_col_name]
+    # ----------------------------------------------
+
+    df_total[target_col_name] = pd.to_numeric(df_total[target_col_name], errors='coerce')
+    df_total[target_col_name] = (df_total[target_col_name] * 1000) / 3600 # W/m²
+    
     for col in feature_cols:
-        if col in df_total.columns: df_total[col] = pd.to_numeric(df_total[col], errors='coerce')
-    all_cols = [target_col] + feature_cols
+        df_total[col] = pd.to_numeric(df_total[col], errors='coerce')
+
+    all_cols = [target_col_name] + feature_cols
     df_total[all_cols] = df_total[all_cols].ffill().bfill()
+
     try:
         df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%d/%m/%Y %H%M UTC', errors='raise')
-    except ValueError:
+    except (ValueError, TypeError):
         df_total['Data'] = pd.to_datetime(df_total['Data'] + ' ' + df_total['Hora UTC'], format='%Y/%m/%d %H%M UTC', errors='coerce')
+    
     df_total.dropna(subset=['Data'], inplace=True)
     min_hour, max_hour = utc_hour_to_int(hour_min_max[0]), utc_hour_to_int(hour_min_max[1])
     cond = df_total['Hora UTC'].apply(lambda x: min_hour <= utc_hour_to_int(x) <= max_hour)
     df_total = df_total[cond]
-    df_total.rename(columns={target_col: 'actual'}, inplace=True)
-    final_cols = ['actual'] + feature_cols
-    df_total = df_total.set_index('Data')[final_cols]
+    
+    df_total.rename(columns={target_col_name: 'actual'}, inplace=True)
+    final_cols_renamed = ['actual'] + feature_cols
+    df_total = df_total.set_index('Data')[final_cols_renamed]
+        
     return df_total
 
 def create_multivariate_dataset(data, look_back=12):
