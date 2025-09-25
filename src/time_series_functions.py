@@ -14,9 +14,6 @@ class result_options:
 def utc_hour_to_int(x):
     return int(str(x).split(' ')[0])
 
-# ==============================================================================
-#               FUNÇÃO 1: PARA ANÁLISE UNIVARIADA (NOME ORIGINAL)
-# ==============================================================================
 def load_data_solar_hours(path, hour_min_max, use_log, save_cv):
     """ Carrega e limpa os dados especificamente para a análise univariada. """
     try:
@@ -49,9 +46,6 @@ def load_data_solar_hours(path, hour_min_max, use_log, save_cv):
     df = df[cond].set_index('Data')[['actual']]
     return df
 
-# ==============================================================================
-#               FUNÇÃO 2: PARA ANÁLISE MULTIVARIADA
-# ==============================================================================
 def find_col_by_substring(columns, substring):
     for col in columns:
         if substring in col: return col
@@ -110,10 +104,6 @@ def load_and_validate_data(path, hour_min_max):
     
     df = df[cond].set_index('Data')[cols_to_use]
     return df, valid_features
-
-# ==============================================================================
-#               FUNÇÕES AUXILIARES (COMPLETAS)
-# ==============================================================================
 
 def create_windowing(df, lag_size):
     """ Função de janelamento para modelos Scikit-learn (univariado). """
